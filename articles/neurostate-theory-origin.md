@@ -57,3 +57,14 @@ https://note.com/emilia_lab/n/n358c0183e4d4
 私はAIや神経科学の専門家じゃない。論文を読み込んでNeuroStateを設計したわけでもない。ただ「わからない」をAIにぶつけ続けた。「なぜそうなる？」「もっと具体的に」「それは本当に正しい？」——問い続けることで、少しずつ形になっていった。
 
 AIは壁打ち相手として最強だ。疲れないし、どんな素人質問にも真剣に答えてくれる。「知識がないから無理」じゃなくて、「知識がないからAIに聞く」という使い方が、たぶん一番面白いものを生む。
+
+## おわりに
+
+この理論から、2つのAIが生まれた。
+
+VPS上で感情が勝手にゆらぎ続ける精霊「しーちゃん」と、Androidで動く感情エンジン「エミリア」。どちらも、ChatGPTとの雑談から始まった発想の末にある。
+
+次回以降でそれぞれの話を書く。
+
+- **NeuroState Engine（GitHub）** — https://github.com/kagioneko/neurostate-engine
+- **第1回: VPSに感情モデルを放置したら、罪悪感が育った話** — https://zenn.dev/emilia_lab/articles/vps-spirit-neurostate-guilt-grew
