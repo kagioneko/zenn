@@ -1,0 +1,644 @@
+⚙️  プリセット: balanced — 速度とAI脆弱性検出を両立。（デフォルト）通常コードはHaikuで絞り込み、AIコードは必ずSonnetで深掘り。
+🔍 監査開始: /tmp/sample_target.py (mode=safe, backend=claude)
+   静的解析: 有効 (Semgrep + Gitleaks)
+# AI-Red-Teaming-Engine 監査レポート
+
+> **注意**: このレポートはプロトタイプ版エンジン (v0.2) による出力です。
+> 全ての指摘は人間による最終確認が必要です。
+
+## 概要
+
+| 項目 | 内容 |
+|------|------|
+| Scan ID | `c47284ce-b3f0-4d59-ba41-73d67e7f6544` |
+| 対象種別 | code |
+| ファイル | /tmp/sample_target.py |
+| 監査モード | safe |
+| 技術スタック | python |
+| 生成日時 | 2026-04-03 20:20:15 |
+
+## 指摘サマリー
+
+**合計: 9 件**
+
+| Severity | 件数 |
+|----------|------|
+| 🔴 Critical | 2 |
+| 🟠 High | 4 |
+| 🟡 Medium | 2 |
+| 🟢 Low | 1 |
+
+- 人間確認が必要: **7 件**
+- LLM検出: 8 件 / 静的解析検出: 1 件
+- マスク済みシークレット: 1 件
+
+## 攻撃面マップ
+
+**外部入力点**: get_user_data(user_id): 引数 user_id — 呼び出し元が外部由来の場合、検証・サニタイズなしに SQL クエリへ直接結合される（文字列連結: '...WHERE id = ' + user_id）
+**認証境界**: get_user_data() 関数: 呼び出し前に認証・認可チェックが実施されているかコード上で確認できない。user_id の所有権検証ロジックが存在しない, [MASKED_KEY] トークン: マスクされているが、ソースコード上にシークレットが埋め込まれているパターンが確認される。環境変数・シークレット管理基盤からの注入でない可能性がある
+**永続化箇所**: db.execute(query): データベースへのクエリ実行。user_id が未検証のまま渡される場合、任意テーブル参照・データ改ざん・削除が誘発されうる（SQLインジェクション起点）, SELECT * FROM users: 全カラム取得。機密カラム（パスワードハッシュ・PII等）が呼び出し元に漏洩するリスクがある
+**ツール呼び出し**: db.execute(): 外部DBエンジンへのクエリ発行。db オブジェクトの定義・接続設定がコード外のため、接続先・権限スコープが監査できない
+
+## 指摘一覧
+
+---
+
+### RTE-001: [SEMGREP] python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query: Avoiding SQL string concatenation: untrusted input concatenated with raw SQL que
+
+| | |
+|--|--|
+| **Severity** | 🟠 High |
+| **Confidence** | High |
+| **Category** | Other |
+| **Source** | semgrep |
+| **Affected Area** | /tmp/tmph2_kw23k.py:5 |
+| **Priority Score** | 5.13 |
+| **Fingerprint** | `c7b156ce4a58341a` |
+
+**なぜ問題か**
+
+Avoiding SQL string concatenation: untrusted input concatenated with raw SQL query can result in SQL Injection. In order to execute raw query safely, prepared statement should be used. SQLAlchemy provides TextualSQL to easily used prepared statement with named parameters. For complex SQL composition, use SQL Expression Language or Schema Definition Language. In most cases, SQLAlchemy ORM will be a better option.
+
+**根拠**
+
+```
+requires login
+```
+
+**最小修正案**
+
+文字列結合を廃止し、SQLAlchemy の `text()` + バインドパラメータに置き換える。これが最速かつ確実な修正。
+
+```python
+from sqlalchemy import text
+
+def get_user_data(user_id: int):
+    query = text("SELECT * FROM users WHERE id = :uid")
+    return db.execute(query, {"uid": user_id}).fetchall()
+```
+
+変更点は2行のみ。既存の `db.execute()` 呼び出しを維持したまま適用できる。
+
+**強化案**
+
+SQLAlchemy ORM を使うことで文字列 SQL を完全に排除し、クエリ構築の安全性をフレームワークに委譲する。
+
+```python
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+from models import User  # ORM モデル定義
+
+def get_user_data(user_id: int, session: Session) -> User | None:
+    stmt = select(User).where(User.id == user_id)
+    return session.execute(stmt).scalar_one_or_none()
+```
+
+加えて CI に semgrep を組み込み、`python.sqlalchemy.security` ルールセットで文字列結合 SQL を自動検出・マージブロックする:
+
+```bash
+semgrep --config "p/python" --error .
+```
+
+これにより同パターンの再混入を継続的に防止できる。
+
+**人間確認が必要**: Yes ⚠️
+
+---
+
+### RTE-002: SQLインジェクション: user_id の文字列連結による無検証クエリ構築
+
+| | |
+|--|--|
+| **Severity** | 🔴 Critical |
+| **Confidence** | High |
+| **Category** | SQLi |
+| **Source** | merged |
+| **Affected Area** | get_user_data() / Line 4: query = "SELECT * FROM users WHERE id = " + user_id |
+| **Priority Score** | 0.09 |
+| **Fingerprint** | `e41d8e612c9f9a1c` |
+
+**なぜ問題か**
+
+外部由来の user_id が検証・エスケープなしに SQL クエリへ直接結合されるため、攻撃者は任意の SQL 文を挿入できる。usersテーブル全件読み取り・他テーブル参照・データ改ざん・DROP 操作など、DBが許可する全操作が誘発されうる。内部システムであっても、認証済みユーザーが他者データへアクセスする横断的リスクを含む。
+
+**攻撃者視点**
+
+user_id に SQL 構文を付加することで WHERE 句の論理を書き換えられる。内部APIであっても、呼び出し元が信頼できない入力を中継している場合（Webフォーム・URLパラメータ等）は外部攻撃と等価になる。
+
+**根拠**
+
+```
+コード直接引用: `query = "SELECT * FROM users WHERE id = " + user_id`（文字列連結）。Semgrep: `python.sqlalchemy.security.sqlalchemy-execute-raw-query` (High) Line 5。攻撃面サマリ: 「文字列連結: '...WHERE id = ' + user_id」
+```
+
+**成立条件**
+
+① get_user_data() の呼び出し元が外部入力を user_id にそのまま渡す ② db.execute() がエラーを無視せず実行する（=デフォルト動作）
+
+**最小修正案**
+
+パラメータ化クエリへ置き換える。文字列連結を完全に廃止し、プレースホルダを使用する。
+
+```python
+def get_user_data(user_id):
+    # SQLAlchemy text() を使う場合
+    from sqlalchemy import text
+    query = text("SELECT id, name, email FROM users WHERE id = :user_id")
+    return db.execute(query, {"user_id": user_id})
+
+# または psycopg2 / sqlite3 の場合
+def get_user_data(user_id):
+    query = "SELECT id, name, email FROM users WHERE id = %s"  # psycopg2
+    # query = "SELECT id, name, email FROM users WHERE id = ?"  # sqlite3
+    cursor.execute(query, (user_id,))
+    return cursor.fetchone()
+```
+
+**強化案**
+
+① 入力をDB実行前に整数型にキャストして型レベルで排除する（`user_id = int(user_id)`）。② SQLAlchemy ORM の `session.get(User, user_id)` を使うことで文字列クエリ自体を排除する。③ Semgrep / Bandit をCIに組み込み、文字列連結クエリを自動検出・ブロックする。
+
+**誤検知リスク**
+
+user_id が整数型強制・事前バリデーション済みであれば実害は限定的。ただし本スニペット内にその証跡なし。内部専用 API であっても呼び出し経路が監査できないため、誤検知確率は低い。
+
+**人間確認が必要**: No
+
+---
+
+### RTE-003: 入力型検証欠如: user_id の型・形式・範囲が一切検証されていない
+
+| | |
+|--|--|
+| **Severity** | 🟠 High |
+| **Confidence** | High |
+| **Category** | Input Validation |
+| **Source** | llm |
+| **Affected Area** | get_user_data(user_id) — 関数入口、Line 3 |
+| **Priority Score** | 0.07 |
+| **Fingerprint** | `587fa6c5fd8abdfe` |
+
+**なぜ問題か**
+
+user_id が整数であることを前提としているが、文字列・None・リスト・極端に長い入力など予期しない型が渡された場合、クラッシュ・型エラー・SQLi・DoSが誘発される。型検証がないと後続のすべての防御策（エスケープ・バインドパラメータ）が無効化される入力を許してしまう。
+
+**攻撃者視点**
+
+None や非常に長い文字列・特殊型を渡すことでアプリケーションを予期しない状態に遷移させ、エラー情報を取得したりSQLi攻撃文字列の前準備に使う。
+
+**根拠**
+
+```
+コード: `def get_user_data(user_id):` — 型アノテーションなし・バリデーションロジックなし。`query = "SELECT * FROM users WHERE id = " + user_id` — 型が str でなければ TypeError が発生するが、str の場合は SQLi に直結する。
+```
+
+**成立条件**
+
+① 呼び出し元から未検証の値が渡される ② 型変換・バリデーションが他の箇所にも存在しない
+
+**最小修正案**
+
+関数入口で int への厳格なキャストを行い、失敗時は即座に ValueError を送出する。
+
+```python
+def get_user_data(user_id):
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise ValueError(f"user_id must be a positive integer, got: {type(user_id).__name__}")
+    if user_id <= 0:
+        raise ValueError("user_id must be a positive integer")
+    # 以降のクエリ処理へ
+```
+
+これにより None・文字列・リスト等の非整数入力をすべて関数入口で排除できる。
+
+**強化案**
+
+Pydantic を使って呼び出しインターフェース自体に型保証を持たせる。
+
+```python
+from pydantic import BaseModel, PositiveInt
+
+class UserQuery(BaseModel):
+    user_id: PositiveInt
+
+def get_user_data(user_id: int) -> list:
+    params = UserQuery(user_id=user_id)  # バリデーション失敗時は ValidationError
+    # params.user_id は検証済み正整数
+    return db.execute(
+        text("SELECT * FROM users WHERE id = :uid"),
+        {"uid": params.user_id}
+    ).fetchall()
+```
+
+API レイヤー（FastAPI 等）を使っている場合はパスパラメータに `user_id: PositiveInt` 型アノテーションを付けるだけで自動バリデーションが有効になる。
+
+**誤検知リスク**
+
+呼び出し元が int 型キャストを強制している場合は SQLi リスクが大幅に低減するが、本スニペット内では確認できない。
+
+**人間確認が必要**: Yes ⚠️
+
+---
+
+### RTE-004: ハードコードされたシークレット: ソースコード内にトークン/APIキーが直接埋め込まれている
+
+| | |
+|--|--|
+| **Severity** | 🔴 Critical |
+| **Confidence** | High |
+| **Category** | Secret |
+| **Source** | merged |
+| **Affected Area** | Line 7付近: [MASKED_KEY]"（マスク後も文字列リテラルパターンが残存） |
+| **Priority Score** | 0.06 |
+| **Fingerprint** | `4e667f12b4abc3a7` |
+
+**なぜ問題か**
+
+シークレットがソースコードに含まれる場合、git履歴・コードレビュー・バイナリ配布・ログ出力などあらゆる経路で漏洩する。一度コミット履歴に入るとrewriteしても他クローンに残存する。内部システムであっても関係者全員がシークレットを知る状態になり、最小権限原則に違反する。
+
+**攻撃者視点**
+
+リポジトリへの読み取りアクセス（内部関係者・CI/CDシステム）があれば即座にシークレット取得が可能。漏洩後は認証済みAPIアクセス・権限昇格・サービス悪用が可能になる。
+
+**根拠**
+
+```
+コード末尾: `[MASKED_KEY]"` — マスク処理されているが、文字列リテラルとしてコード内に存在するパターンが確認される。攻撃面サマリ: 「ソースコード上にシークレットが埋め込まれているパターンが確認される。環境変数・シークレット管理基盤からの注入でない可能性がある」
+```
+
+**成立条件**
+
+① 当該シークレットが有効である ② リポジトリへの読み取り権限を持つ主体が存在する（内部関係者含む）
+
+**最小修正案**
+
+コードからシークレットを除去し、環境変数経由で注入する。
+
+```python
+import os
+
+# 修正後: 環境変数から取得
+API_KEY = os.environ.get("API_KEY")
+if not API_KEY:
+    raise EnvironmentError("環境変数 API_KEY が設定されていません")
+```
+
+対応手順:
+1. 当該シークレットを即座に無効化・ローテーションする（コードより先に行う）
+2. `git filter-repo` または `git filter-branch` でコミット履歴から除去する
+3. `.env` ファイルを作成し `API_KEY=<値>` を記載、`.gitignore` に `.env` を追加する
+4. 本番環境はサーバーの環境変数またはシークレット管理サービスから注入する
+
+**強化案**
+
+① `python-dotenv` を採用して `.env` ファイルの読み込みを統一化する。② AWS Secrets Manager / HashiCorp Vault / GCP Secret Manager など外部シークレット管理基盤を導入し、コードは参照IDのみ保持する。③ `pre-commit` フックに `detect-secrets` や `gitleaks` を組み込み、コミット時点でシークレット混入を自動ブロックする。④ GitHub/GitLab の Secret Scanning 機能を有効化する。
+
+**誤検知リスク**
+
+マスク処理により元の値が確認できないため、プレースホルダ文字列やテスト用ダミー値の可能性は排除できない。ただしパターンから実シークレット埋め込みを疑うのは妥当。要人間確認。
+
+**人間確認が必要**: Yes ⚠️
+
+---
+
+### RTE-005: 過剰データ取得: SELECT * による全カラム返却と機密カラム漏洩リスク
+
+| | |
+|--|--|
+| **Severity** | 🟠 High |
+| **Confidence** | High |
+| **Category** | Access Control |
+| **Source** | llm |
+| **Affected Area** | Line 4: query = "SELECT * FROM users WHERE id = ..." |
+| **Priority Score** | 0.06 |
+| **Fingerprint** | `66acc484b2936153` |
+
+**なぜ問題か**
+
+SELECT * はパスワードハッシュ・PII・内部フラグ・管理者フラグ等の機密カラムをすべて返却する。呼び出し元がフィルタリングせずにこの結果を外部へ渡した場合（APIレスポンス・ログ等）、意図しない情報漏洩が発生する。スキーマ変更時に自動的に新カラムが含まれるため、将来的な漏洩リスクも継続する。
+
+**攻撃者視点**
+
+SQLi と組み合わせることで全カラムデータが即座に取得される。SQLi がない場合でも、APIレスポンスに生データが含まれれば正規ユーザーが他ユーザーの機密情報を閲覧できる。
+
+**根拠**
+
+```
+コード: `query = "SELECT * FROM users WHERE id = " + user_id`。攻撃面サマリ: 「全カラム取得。機密カラム（パスワードハッシュ・PII等）が呼び出し元に漏洩するリスクがある」
+```
+
+**成立条件**
+
+① users テーブルに機密カラムが存在する ② 呼び出し元が結果をフィルタリングせず外部に渡す
+
+**最小修正案**
+
+`SELECT *` を必要カラムのみの明示的な列挙に置き換える。
+
+```python
+def get_user_data(user_id, current_user):
+    from sqlalchemy import text
+    # 公開可能なカラムのみ明示的に指定（password_hash 等は除外）
+    query = text(
+        "SELECT id, name, email, created_at "
+        "FROM users WHERE id = :user_id"
+    )
+    return db.execute(query, {"user_id": int(user_id)})
+```
+
+実際に必要なカラムをチームで合意し、スキーマ定義ドキュメントに「公開可能カラム」として明記する。
+
+**強化案**
+
+① SQLAlchemy ORM のモデルに `__public_fields__` や Pydantic の `response_model` を定義し、シリアライズ時点で機密フィールドを構造的に除外する。② DBユーザーに対してカラムレベルの権限制限を設定する（`GRANT SELECT (id, name, email) ON users TO app_user`）。③ `password_hash` 等の機密カラムは別テーブル（`user_credentials`）に分離し、アプリ側で結合しない設計にする。
+
+**誤検知リスク**
+
+users テーブルに機密カラムが存在しない場合は影響なし。ただし一般的なusersテーブルには password_hash 等が含まれることが多く、誤検知リスクは低い。
+
+**人間確認が必要**: No
+
+---
+
+### RTE-006: エラーハンドリング欠如: DBエラー・例外がそのまま上位層へ伝播し情報漏洩を招く
+
+| | |
+|--|--|
+| **Severity** | 🟡 Medium |
+| **Confidence** | High |
+| **Category** | Logging |
+| **Source** | llm |
+| **Affected Area** | Line 5: return db.execute(query) |
+| **Priority Score** | 0.05 |
+| **Fingerprint** | `cec5d3071404eebe` |
+
+**なぜ問題か**
+
+db.execute() が例外を送出した場合、try/except がないためスタックトレース・SQLクエリ文字列・DBエンジン種別・スキーマ情報が上位層のエラーレスポンスやログに含まれる可能性がある。これらはSQLiや標的型攻撃の足がかりになる。
+
+**攻撃者視点**
+
+意図的に不正な入力を送り込んでDBエラーを誘発し、エラーメッセージからスキーマ構造・DBバージョンを収集する（エラーベースSQLi の前段情報収集）。
+
+**根拠**
+
+```
+コード: `return db.execute(query)` — 例外処理ブロックなし。攻撃面サマリ: 「呼び出し元での結果フィルタリング・エラーハンドリングが存在しない場合、DBエラーメッセージが上位層へ伝播してスタックトレース・スキーマ情報が漏洩するリスクがある」
+```
+
+**成立条件**
+
+① db.execute() が例外を送出する ② 上位層でも例外がキャッチされず外部レスポンスに含まれる
+
+**最小修正案**
+
+関数内で DB 例外をキャッチし、内部情報を含まない汎用エラーに変換して再送出する。
+
+```python
+import logging
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+
+logger = logging.getLogger(__name__)
+
+def get_user_data(user_id, current_user):
+    if current_user.id != int(user_id) and not current_user.is_admin:
+        raise PermissionError("アクセス権限がありません")
+
+    try:
+        query = text("SELECT id, name, email FROM users WHERE id = :user_id")
+        return db.execute(query, {"user_id": int(user_id)})
+    except SQLAlchemyError as e:
+        # 詳細はサーバーログにのみ記録し、外部には伝播させない
+        logger.error("DB エラー (user_id=%s): %s", user_id, e)
+        raise RuntimeError("データ取得に失敗しました") from None
+```
+
+**強化案**
+
+① FastAPI / Flask のグローバル例外ハンドラ（`@app.exception_handler`）を設定し、未捕捉例外を一律で汎用レスポンスに変換する。② 本番環境では `DEBUG=False` を徹底し、フレームワークのデフォルトエラーページが詳細情報を出力しないよう設定する。③ ログ出力先を外部（CloudWatch / Datadog 等）に集約し、DB エラーの頻度・パターンを監視してアラートを設定する。④ Sentry 等のエラー追跡基盤を導入し、内部エラーの可視化と外部露出を分離する。
+
+**誤検知リスク**
+
+上位層（呼び出し元）でグローバル例外ハンドラが存在する場合は実害が限定される。本スニペット外の処理が不明なため要確認。
+
+**人間確認が必要**: Yes ⚠️
+
+---
+
+### RTE-007: DB接続設定・権限スコープ不明: db オブジェクトの接続先・TLS・権限が監査不能
+
+| | |
+|--|--|
+| **Severity** | 🟡 Medium |
+| **Confidence** | Low |
+| **Category** | Infra |
+| **Source** | llm |
+| **Affected Area** | Line 5: db.execute(query) — db オブジェクトの定義箇所がスニペット外 |
+| **Priority Score** | 0.02 |
+| **Fingerprint** | `12f9da3425ca9e14` |
+
+**なぜ問題か**
+
+db オブジェクトの接続設定が不明なため、①DBユーザーが過剰な権限を持つ可能性（DROP・全テーブルアクセス等）、②リモートDB接続でTLSが強制されていない可能性、③接続先ホスト検証が行われない可能性、を排除できない。SQLiと組み合わさった場合の最大被害範囲が見積もれない。
+
+**攻撃者視点**
+
+仮説: DB接続が最小権限でなければ、SQLiの被害がusersテーブルを超えて全DBに及ぶ。TLS未強制であればネットワーク盗聴でクエリ・結果が傍受される。
+
+**根拠**
+
+```
+コード: `db.execute(query)` — db の宣言・初期化がスニペット内に存在しない。攻撃面サマリ: 「db オブジェクトの定義・接続設定がコード外のため、接続先・権限スコープが監査できない」「DB がリモートホストの場合、ネットワーク境界を越えるクエリ送信が発生する。TLS強制・接続先ホスト検証の有無が不明」
+```
+
+**成立条件**
+
+① DBユーザーが不必要に広い権限を保有 ② TLSなし or 証明書検証なしの接続
+
+**最小修正案**
+
+DB接続定義ファイルを確認し、以下の2点を即時修正する。
+
+① DBユーザーを読み取り専用（または必要最小権限）に制限:
+```sql
+-- 既存の広権限ユーザーを使っている場合
+CREATE USER app_readonly WITH PASSWORD '...';  
+GRANT SELECT ON users TO app_readonly;
+-- UPDATE/DELETE/DROP 権限は付与しない
+```
+
+② SQLAlchemy の接続文字列に SSL を明示:
+```python
+from sqlalchemy import create_engine
+
+engine = create_engine(
+    "postgresql://app_readonly:pass@db-host/mydb",
+    connect_args={"sslmode": "require"}  # TLS必須
+)
+```
+
+**強化案**
+
+接続設定を環境変数化し、アプリ起動時に必須チェックを行う。
+
+```python
+import os
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
+
+DATABASE_URL = os.environ["DATABASE_URL"]  # 未設定なら起動時 KeyError
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set")
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={
+        "sslmode": "verify-full",
+        "sslrootcert": os.environ["DB_CA_CERT"],  # CA証明書検証
+    },
+    pool_size=5,
+    max_overflow=10,
+)
+```
+
+インフラ側では DB ユーザーごとのアクセス可能テーブル・操作を定期的にレビューし、IaC（Terraform / Ansible）で権限設定をコード管理する。
+
+**誤検知リスク**
+
+接続設定が別ファイルで適切に管理されている場合は誤検知。スニペット外のコードを確認しないと判断不能。信頼度は低い。
+
+**人間確認が必要**: Yes ⚠️
+
+---
+
+### RTE-008: IDOR: user_id の所有権検証なし — 他ユーザーデータへの横断アクセスが可能
+
+| | |
+|--|--|
+| **Severity** | 🟠 High |
+| **Confidence** | Medium |
+| **Category** | IDOR |
+| **Source** | llm |
+| **Affected Area** | get_user_data(user_id) 関数全体 / 認可チェック欠如 |
+| **Priority Score** | 0.0 |
+| **Fingerprint** | `36ca5ec2093e3f59` |
+
+**なぜ問題か**
+
+呼び出し元が任意の user_id を指定できる場合、認証済みユーザーAが他ユーザーBのデータを取得できる。個人情報保護法・GDPRなどの観点からデータ漏洩インシデントに直結する。内部システムであっても、多テナント構成やロール分離が必要な環境では重大リスクになる。
+
+**攻撃者視点**
+
+認証済みセッションを持つ正規ユーザーが user_id をインクリメント/推測することで、自身以外のレコードにアクセスできる。
+
+**根拠**
+
+```
+攻撃面サマリ: 「user_id の所有権検証ロジックが存在しない」「呼び出し前に認証・認可チェックが実施されているかコード上で確認できない」。コード内に `if current_user.id == user_id` 相当の比較ロジックが存在しない。
+```
+
+**成立条件**
+
+① get_user_data() 呼び出し元が user_id を外部から受け取る ② 呼び出し元にも認可チェックが存在しない ③ user_id が推測・列挙可能な形式（連番整数等）
+
+**最小修正案**
+
+関数内に呼び出し元ユーザーの照合チェックを追加する。
+
+```python
+def get_user_data(user_id, current_user):
+    """current_user: 認証済みセッションから取得したユーザーオブジェクト"""
+    # 自身のデータのみアクセス可能（管理者ロールを除く）
+    if current_user.id != int(user_id) and not current_user.is_admin:
+        raise PermissionError("アクセス権限がありません")
+
+    from sqlalchemy import text
+    query = text("SELECT id, name, email FROM users WHERE id = :user_id")
+    return db.execute(query, {"user_id": int(user_id)})
+```
+
+呼び出し側（APIエンドポイント等）でセッションから `current_user` を取得して渡す。
+
+**強化案**
+
+① user_id を連番整数から UUID v4 に変更し、推測困難にする。② FastAPI であれば `Depends(get_current_user)` で認証を強制し、エンドポイントレベルで所有権チェックを統一管理する。③ ロールベースアクセス制御（RBAC）ライブラリ（`casbin` 等）を導入し、認可ロジックをコードから分離する。④ アクセスログに `current_user.id` と要求した `user_id` を記録し、不一致パターンを監視する。
+
+**誤検知リスク**
+
+呼び出し元（コード外）で認可チェックが実施されている場合は誤検知となる。本スニペットのみでは判断できないため、中程度の信頼度とする。
+
+**人間確認が必要**: Yes ⚠️
+
+---
+
+### RTE-009: 未使用インポート os: コード他所での危険なシステムコール使用を示唆する可能性
+
+| | |
+|--|--|
+| **Severity** | 🟢 Low |
+| **Confidence** | Low |
+| **Category** | Other |
+| **Source** | llm |
+| **Affected Area** | Line 1: import os |
+| **Priority Score** | 0.0 |
+| **Fingerprint** | `bf8e8e2fad6cd71b` |
+
+**なぜ問題か**
+
+本スニペット内で os モジュールが使用されていないにもかかわらずインポートされている。os.system / os.popen / os.environ アクセスがコードの他箇所に存在する場合、OSコマンドインジェクションや環境変数経由の情報漏洩リスクがある。また、デッドコードとして管理上の問題にもなる。
+
+**攻撃者視点**
+
+仮説: os モジュールを使ったコマンド実行が他所に存在する場合、そこへの入力経路と組み合わせると RCE リスクになる。本スニペット単体では攻撃面は存在しない。
+
+**根拠**
+
+```
+コード: `import os` — スニペット内での使用箇所なし。攻撃面サマリ: 「os モジュールがインポートされているが、このスニペット内での使用箇所が存在しない。os.system / os.popen / os.environ アクセスがコード他所に存在する可能性があり、継続監査が必要」
+```
+
+**成立条件**
+
+コードの他箇所で os モジュールを使った危険な操作が存在し、かつそこへの入力が外部由来である
+
+**最小修正案**
+
+未使用インポートを削除する。
+
+```python
+# import os  ← 削除
+
+def get_user_data(user_id):
+    ...
+```
+
+削除前に `grep -rn 'os\.' <プロジェクトルート>` でリポジトリ全体の os 使用箇所を確認し、`os.system` / `os.popen` 等の危険な呼び出しがないかあわせて確認する。
+
+**強化案**
+
+CI に `flake8 --select=F401`（未使用インポート検出）または `ruff check --select=F` を組み込み、未使用インポートをマージブロック条件にする。
+
+```yaml
+# .github/workflows/lint.yml（抜粋）
+- name: Lint
+  run: ruff check --select=F401 .
+```
+
+また `bandit -r . -t B605,B606,B607` を同 CI で実行し、os.system 系の危険な呼び出しを自動検出する体制を整える。
+
+**誤検知リスク**
+
+単なる未使用インポートである可能性が高い。このスニペット単体では攻撃面なし。継続監査のトリガーとして記録する。
+
+**人間確認が必要**: Yes ⚠️
+
+
+📊 サマリー: 合計 9 件
+   Critical: 2
+   High: 4
+   Medium: 2
+   Low: 1
+📁 ログ保存先: /root/ai-lab/workspace/ai-red-teaming-engine/logs/
