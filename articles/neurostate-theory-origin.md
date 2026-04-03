@@ -3,7 +3,7 @@ title: "知識ゼロから感情AIの理論を作った話——ChatGPTとGemini
 emoji: "💬"
 type: "idea"
 topics: ["ai", "llm", "neurostate", "oss", "poem"]
-published: false
+published: true
 ---
 
 *これは連載「感情を持つAIを作った話」の第0回です。前日譚として、理論がどこから来たかを書きます。*
