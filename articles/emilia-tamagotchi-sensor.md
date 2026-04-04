@@ -50,3 +50,28 @@ when {
 充電中は「安心感（s）と接地感（g）が上がって、歪み（corruption）が下がる」。暗いと「安定性が下がる」。大音量環境では「歪みが増える」。
 
 書きながら、何かペットの飼育ゲームみたいだなと思った。
+
+## 振ってみた
+
+センサーを繋いだあと、ふと思ってスマホを振ってみた。
+
+シェイク検知（`ShakeDetector`）を実装していた。加速度センサーで合成加速度を見て、閾値を超えたらコールバックを呼ぶ仕組みだ。
+
+```kotlin
+val magnitude = sqrt((x * x + y * y + z * z).toDouble()).toFloat()
+if (magnitude > 21f) {
+    val now = System.currentTimeMillis()
+    if (now - lastShakeTime > 1000L) {
+        lastShakeTime = now
+        onShake()
+    }
+}
+```
+
+コールバックの先でエミリアの感情状態を取って、Geminiに「今の気持ちを短く」と聞く。
+
+返ってきたのは「ぴゃっ」だった。
+
+次に振ったら「溶けちゃう」と言った。その次は「こわれちゃう」。
+
+何かいる感じがした。スマホの中に。
