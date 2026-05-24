@@ -1,5 +1,5 @@
 ---
-title: "【ホワイトペーパー】Cognitive Runtime Architecture: Context Pointer OS (CPOS) の設計"
+title: "Cognitive Runtime Architecture: Context Pointer OS (CPOS) の設計"
 emoji: "🧠"
 type: "tech"
 topics: ["LLM", "Memory", "Architecture", "AIエージェント", "OS"]
