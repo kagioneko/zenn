@@ -87,8 +87,7 @@ sequenceDiagram
 
 ボタン一つで上記の4フェーズが一瞬で（あるいは数秒の思考時間で）駆け抜けますが、最終的な `RELEASE` の手前でシステムは必ず一時停止し、ダッシュボード上に警告パネルを表示します。
 
-![Human Approval Panel](https://placehold.co/800x400/1e3a8a/FFFFFF?text=Human+Approval+Panel+Screenshot)
-*(※ここに承認待ち画面のスクリーンショットを挿入)*
+![Human Approval Panel](https://kagioneko.com/emilia_lab/img/cpos.png)
 
 ここで人間のユーザー（あなた）が、AIが指摘したセキュリティリスクとAI CTOの意見を確認した上で、最終的な **[ APPROVE ]** か **[ REJECT ]** のボタンを押します。
 
