@@ -1,3 +1,11 @@
+---
+title: "AIエージェントの安全性を構造から担保する：AIT Firewall (v12.0) の設計と実装"
+emoji: "🛡️"
+type: "tech"
+topics: ["LLM", "Security", "AI", "プロンプトインジェクション", "OSS"]
+published: true
+---
+
 # AIエージェントの安全性を構造から担保する：AIT Firewall (v12.0) の設計と実装
 
 LLM（大規模言語モデル）を活用したアプリケーションにおいて、「命令（Instruction）」と「データ（Data）」の混同を突くプロンプトインジェクションは極めて深刻な課題です。
