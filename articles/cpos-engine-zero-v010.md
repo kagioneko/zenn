@@ -3,7 +3,7 @@ title: "CPOS Engine-Zero v0.1.0を正式リリースしました：安全寄り�
 emoji: "🛡️"
 type: "tech"
 topics: ["aiagent", "security", "python", "oss", "github"]
-published: false
+published: true
 ---
 
 ## はじめに
