@@ -214,3 +214,62 @@ AIエージェントに必要なのは、賢さだけではない。
 AGIではない。
 
 でも、AGIもどきを安全に育てるための土台にはなるかもしれない。
+
+## 追記：fast resume without raw logs
+
+最近この構成に、もう一つ大事な部品を足した。
+
+それが **Resume Pipeline** だ。
+
+目的はシンプルで、次のセッションに早く戻ること。
+
+ただし、ここでも「全部保存」はしない。
+
+エージェントの引き継ぎを早くしたいからといって、raw log、raw diff、コマンド出力、DB行、スマホ由来の本文、秘密情報をそのまま記憶に入れると、あとで危ない。
+
+そこで、Resume Pipeline は次のような短いメタデータの束だけを作る。
+
+```text
+World Model
+→ Reflection Evaluator
+→ Resume Pointer
+→ Pointer Validation
+→ tape-memory write-plan dry-run
+→ compact payload secret scan
+```
+
+ここで作るのは、あくまで「次にどこから再開すればいいか」のポインタだ。
+
+たとえば、以下のような情報だけを扱う。
+
+- 現在のリスクレベル
+- 既知のリスク名
+- Goal Store の validation 結果
+- Reflection の recommendation
+- Resume Pointer の validation 結果
+- tape-memory に書くならどうするか、という dry-run plan
+- compact payload に秘密情報らしきパターンがないか
+
+重要なのは、write-plan はあくまで dry-run であることだ。
+
+```text
+dry_run = true
+would_write = false
+write_enabled = false
+```
+
+つまり、記憶に書く前の安全検査までは作るが、実際に書くところはまだ有効化しない。
+
+将来 tape-memory のような外部記憶に接続するとしても、その直前で secret scan を通し、人間の明示確認を必要にする。
+
+この設計は、エージェントを賢くするためというより、**引き継ぎを速くしながら事故らないため**のものだ。
+
+長いログを全部持ち越すのではなく、短い安全なポインタだけを持ち越す。
+
+私はこれを、今のところ **fast resume without raw logs** と呼んでいる。
+
+AIエージェントが実用に近づくほど、記憶は「多ければよい」ではなくなる。
+
+むしろ、何を記憶しないか、何を圧縮するか、どこで人間に確認するかが重要になる。
+
+Cognitive Agent OS における記憶は、巨大なログ倉庫ではなく、次の安全な一歩に戻るための地図であるべきだと思っている。
