@@ -1,5 +1,5 @@
 ---
-title: "AIエージェントに「生産性」と「防御」を。Google Cloud + Geminiで作る自律型DevOpsエージェント『Engine-Zero』"
+title: "AIエージェントに生産性と防御を。Google Cloud + Geminiで作る『Engine-Zero』"
 emoji: "🛡️"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["googlecloud", "gemini", "aiagent", "devops", "security"]
