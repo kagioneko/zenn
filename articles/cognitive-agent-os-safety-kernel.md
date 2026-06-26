@@ -3,7 +3,7 @@ title: "AIエージェントに必要なのは、賢さより先に「壊れな�
 emoji: "🧠"
 type: "idea"
 topics: ["ai", "agent", "security", "architecture", "llm"]
-published: false
+published: true
 ---
 
 AIエージェントを作っていると、つい「もっと賢いモデル」「もっと強い推論」「もっと自律的な実行」に目が行きがちだ。

@@ -3,7 +3,7 @@ title: "AIエージェントに生産性と防御を。Google Cloud + Geminiで�
 emoji: "🛡️"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["googlecloud", "gemini", "aiagent", "devops", "security"]
-published: false
+published: true
 ---
 
 # はじめに

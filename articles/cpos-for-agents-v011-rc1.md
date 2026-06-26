@@ -3,7 +3,7 @@ title: "CPOS for Agents：外部エージェントの横に置く安全レイヤ
 emoji: "🧯"
 type: "tech"
 topics: ["aiagent", "security", "oss", "python", "github"]
-published: false
+published: true
 ---
 
 ## はじめに
