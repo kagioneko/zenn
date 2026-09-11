@@ -1,5 +1,5 @@
 ---
-title: "Anthropic社「Fable 5」および「Mythos 5」を巡る技術的・地政学的分析：サイバー攻撃能力、コミュニティのリーク、そして国家によるAI統制の深層"
+title: "Anthropic社「Fable 5」「Mythos 5」を巡る技術的・地政学的分析：攻撃能力とAI統制の深層"
 emoji: "🌐"
 type: "tech"
 topics: ["ai", "anthropic", "llm", "security", "geopolitics"]
