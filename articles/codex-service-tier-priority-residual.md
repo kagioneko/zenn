@@ -3,7 +3,7 @@ title: "Codexのservice_tierがpriority（Fast Mode）のまま残留する問�
 emoji: "🔍"
 type: "tech"
 topics: ["OpenAI", "Codex", "Windows", "debugging", "Python"]
-published: false
+published: true
 ---
 
 ## TL;DR
