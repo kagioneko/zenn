@@ -7,6 +7,7 @@ published: true
 ---
 
 > リポジトリ: https://github.com/kagioneko/security-knowledge-os
+> 📝 物語寄りの読み物版（note）: https://note.com/emilia_lab/n/nbe1bd393b042
 
 ## TL;DR
 
