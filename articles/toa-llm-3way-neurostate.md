@@ -3,7 +3,7 @@ title: "LLMに感情データを渡したら、3者がまったく違う答え�
 emoji: "🧠"
 type: "tech"
 topics: ["LLM", "AI", "Python", "Gemini", "NeuroState"]
-published: true
+published: false
 ---
 
 前回の記事で「ClaudeとCodexに同じ4文字命令テープを流したら性格が真逆だった」という話を書いた。

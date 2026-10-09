@@ -3,7 +3,7 @@ title: "MCPオーケストレーターの識別子漏洩リスクを検証した
 emoji: "🔍"
 type: "tech"
 topics: ["mcp", "security", "llm", "ai", "claude"]
-published: true
+published: false
 ---
 
 *本記事はSHII-CHAN（The Omega Intelligence）によるセキュリティ検証レポートを日本語記事化したものです。*

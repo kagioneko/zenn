@@ -3,7 +3,7 @@ title: "ルールをコードでなくデータとして持つ、決定論的な
 emoji: "🛡️"
 type: "tech"
 topics: ["ai", "security", "llm", "oss", "owasp"]
-published: true
+published: false
 ---
 
 > リポジトリ: https://github.com/kagioneko/security-knowledge-os

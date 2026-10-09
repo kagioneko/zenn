@@ -3,7 +3,7 @@ title: "NeuroStateを「LLMの前に置くゲート」として使う——Ablat
 emoji: "🔬"
 type: "tech"
 topics: ["ai", "llm", "neurostate", "security", "agent"]
-published: true
+published: false
 ---
 
 *これは「NeuroState」シリーズの実験レポートです。NeuroStateの理論的背景は [前の記事](https://zenn.dev/nekoresearch/articles/neurostate-theory-origin) を参照してください。*

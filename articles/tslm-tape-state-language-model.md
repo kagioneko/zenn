@@ -3,7 +3,7 @@ title: "Tape-State Language Model（TSLM）— 「次の単語」ではなく「
 emoji: "📼"
 type: "idea"
 topics: ["LLM", "機械学習", "自然言語処理", "アーキテクチャ", "NeuroState"]
-published: true
+published: false
 ---
 
 :::message

@@ -3,7 +3,7 @@ title: "1次元の命令テープを捨て、AIを「生命体」として回路
 emoji: "🫀"
 type: "tech"
 topics: ["LLM", "AI", "Architecture", "Docker", "Security"]
-published: true
+published: false
 ---
 
 「プログラムは、1次元の命令の羅列（テープ）である」
